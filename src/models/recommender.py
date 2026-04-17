@@ -13,7 +13,7 @@ class Recommender:
             with open(matrix_path, 'rb') as f:
                 self.sim_matrix = pickle.load(f)
         except Exception as e:
-            print(f"❌ Matrix load failed: {e}")
+            print(f" Matrix load failed: {e}")
 
     def apply_bias_penalty(self, scores, source_vendor):
         """Rule: -25% score if same vendor and similarity > 0.8."""

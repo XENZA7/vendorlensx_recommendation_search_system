@@ -4,9 +4,9 @@ import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 
 class Recommender:
-    def __init__(self, data_path, matrix_path):
-        self.df = pd.read_csv(data_path)
-        self.load_matrix(matrix_path)
+    def __init__(self, data_path, sim_matrix):
+        self.df = pd.read_csv(data_path, encoding='utf-8-sig')
+        self.sim_matrix = sim_matrix
 
     def load_matrix(self, matrix_path):
         try:

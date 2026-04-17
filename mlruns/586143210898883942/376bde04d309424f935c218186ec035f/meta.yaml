@@ -1,0 +1,14 @@
+artifact_uri: file:///C:/Users/siyal/OneDrive/Documents/VendorLensX/vendorlensx_recommendation_search_system/mlruns/586143210898883942/376bde04d309424f935c218186ec035f/artifacts
+end_time: 1776446270373
+entry_point_name: ''
+experiment_id: '586143210898883942'
+lifecycle_stage: active
+run_id: 376bde04d309424f935c218186ec035f
+run_name: placid-lark-468
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1776446270049
+status: 4
+tags: []
+user_id: siyal

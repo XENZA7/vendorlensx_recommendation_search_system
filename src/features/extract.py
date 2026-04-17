@@ -36,14 +36,24 @@ def recover_brand(row):
         
     return existing_brand.capitalize()
 
-def extract_ram(title):
-    """
-    Regex worker to pull RAM specs. 
-    Handles: '8GB', '16 GB RAM', '12gb ram', etc.
-    """
-    if not isinstance(title, str): return 0
-    match = re.search(r'(\d+)\s*(?:gb|GB)\s*(?:ram|RAM|)', title)
-    return int(match.group(1)) if match else 0
+def extract_ram(text):
+    if not isinstance(text, str): 
+        return None
+    
+    # This pattern catches: 
+    # "8GB", "8 GB", "8gb", "8 gb", "8-GB", "8 giga", "RAM: 8GB"
+    pattern = r'(\d+)\s*(?:GB|gb|Gb|giga|Giga|GB\s+RAM|gb\s+ram)'
+    
+    match = re.search(pattern, text, re.IGNORECASE)
+    if match:
+        try:
+            val = int(match.group(1))
+            # Sanity check: Laptops/Phones usually have 1GB to 128GB RAM
+            if 1 <= val <= 128:
+                return val
+        except ValueError:
+            return None
+    return None
 
 # Internal alias as requested
 extract_gb = extract_ram

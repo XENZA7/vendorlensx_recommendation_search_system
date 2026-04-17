@@ -116,3 +116,11 @@ def run_feature_engineering(df):
     
     print(f" Feature Engineering Complete. Generated {len(df.columns)} features.")
     return df
+def extract_storage(text):
+    """Detects Storage (e.g., '256GB', '1TB')."""
+    if not isinstance(text, str): return None
+    tb_match = re.search(r'(\d+)\s*(?:tb|TB)', text, re.IGNORECASE)
+    if tb_match: return f"{tb_match.group(1)}TB"
+    gb_match = re.search(r'(\d+)\s*(?:gb|GB)', text, re.IGNORECASE)
+    if gb_match: return f"{gb_match.group(1)}GB"
+    return None

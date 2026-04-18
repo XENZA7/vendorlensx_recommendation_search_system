@@ -15,9 +15,9 @@ models = {}
 async def lifespan(app: FastAPI):
     """6.2 Model Persistence Strategy: Load once at startup"""
     try:
-        print("🧠 Loading models and dataset into memory...")
+        print(" Loading models and dataset into memory...")
         # Paths (adjust based on your actual folder structure)
-        clean_data_path = "data/clean_products.csv"
+        clean_data_path = "Data/clean_products.csv"
         matrix_path = "models/similarity_matrix.joblib"
         vectorizer_path = "models/vectorizer.joblib"
 
@@ -29,12 +29,12 @@ async def lifespan(app: FastAPI):
         # Initialize Recommender
         models["recommender"] = Recommender(clean_data_path, models["sim_matrix"])
         
-        print(f"✅ Startup complete. Dataset size: {len(models['df'])} products.")
+        print(f" Startup complete. Dataset size: {len(models['df'])} products.")
         yield
     finally:
         # Cleanup logic if needed
         models.clear()
-        print("🛑 API shutting down...")
+        print(" API shutting down...")
 
 app = FastAPI(title="VendorLensX Comparison API", lifespan=lifespan)
 
@@ -81,40 +81,60 @@ async def search(
     # Convert to list of dicts with image URLs and vendor links
     return results.to_dict(orient="records")
 
-@app.get("/recommend/{product_id}")
-async def recommend(product_id: str, n: int = 5):
-    """6.1 GET /recommend/{product_id} - Cross-vendor recommendations"""
-    try:
-        # Recommender class already handles the similarity math
-        recommendations = models["recommender"].recommend(product_id, n=n)
-        return recommendations.to_dict(orient="records")
-    except Exception:
-        raise HTTPException(status_code=404, detail=f"Product ID {product_id} not found.")
 
+@app.get("/recommend/{product_id}")
+async def recommend(product_id: int, n: int = 5):
+    try:
+        # 1. Validate that the ID exists in the dataframe first
+        if product_id not in models["df"]['id'].values:
+            raise HTTPException(status_code=404, detail="Product ID not in database")
+
+        # 2. Get recommendations
+        recommendations = models["recommender"].recommend(product_id, n=n)
+        
+        # 3. Clean the output for JSON (Crucial for 500 error prevention)
+        return recommendations.fillna("").to_dict(orient="records")
+    except Exception as e:
+        print(f" Recommender Crash: {e}")
+        # This will tell us if it's an Index error or a Math error
+        raise HTTPException(status_code=500, detail=f"Recommendation Error: {str(e)}")
+    
 @app.get("/product/{product_id}")
-async def get_product(product_id: str):
-    """6.1 GET /product/{product_id} - Full details and specs"""
+async def get_product(product_id: int): # Change str to int here
     df = models["df"]
+    
+    # Lookup by integer
     product = df[df['id'] == product_id]
     
     if product.empty:
-        raise HTTPException(status_code=404, detail="Product not found.")
+        raise HTTPException(status_code=404, detail=f"Product {product_id} not found.")
     
-    return product.iloc[0].to_dict()
+    return product.fillna("").iloc[0].to_dict()
 
 @app.get("/filters")
 async def get_filters(category: Optional[str] = None):
-    """6.1 GET /filters - Dynamic frontend filters"""
-    df = models["df"]
-    if category:
-        df = df[df['category'] == category]
+    try:
+        df = models["df"]
+        if category and category != "All":
+            df = df[df['category'] == category]
         
-    return {
-        "brands": df['brand'].dropna().unique().tolist(),
-        "min_price": float(df['discounted_price'].min()),
-        "max_price": float(df['discounted_price'].max()),
-        "categories": models["df"]['category'].unique().tolist()
-    }
+        # Use .dropna() and handle empty lists to prevent JSON crashes
+        brands = sorted([str(b) for b in df['brand'].unique() if b and str(b) != 'nan'])
+        categories = sorted([str(c) for c in df['category'].unique() if c and str(c) != 'nan'])
+        
+        # Ensure prices are Python floats, not NumPy floats
+        min_p = float(df['discounted_price'].min()) if not df.empty else 0
+        max_p = float(df['discounted_price'].max()) if not df.empty else 1000000
+
+        return {
+            "brands": brands,
+            "categories": categories,
+            "min_price": min_p,
+            "max_price": max_p
+        }
+    except Exception as e:
+        print(f"🚨 Filter Crash: {e}")
+        raise HTTPException(status_code=500, detail=f"Filter Error: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn 

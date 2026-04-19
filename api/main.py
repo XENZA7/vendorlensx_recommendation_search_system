@@ -9,6 +9,8 @@ from fastapi import FastAPI, HTTPException, Query
 
 from src.models.recommender import Recommender
 from src.search.engine import SearchEngine
+import pandas as pd
+pd.set_option('future.no_silent_downcasting', True) # Add this
 
 # Global model store — loaded once at startup, reused for every request
 models: dict = {}

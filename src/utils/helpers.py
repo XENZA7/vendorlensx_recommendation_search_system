@@ -1,56 +1,84 @@
-import os
 import time
 import functools
+import logging
 from pathlib import Path
-
-def get_data_path(filename):
-    """
-    Portable path resolution. 
-    Finds the /data folder regardless of if you run from root or /src.
-    """
-    root = Path(__file__).parent.parent.parent
-    return root / "data" / filename
-
+ 
+import pandas as pd
+ 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger(__name__)
+ 
+ 
+def get_project_root() -> Path:
+    """Absolute path to project root (parent of src/)."""
+    return Path(__file__).resolve().parent.parent.parent
+ 
+ 
+def get_data_path(relative: str) -> Path:
+    """Resolve a path relative to the project root."""
+    return get_project_root() / relative
+ 
+ 
 def timer(func):
-    """
-    Decorator to measure execution time of pipeline steps.
-    Useful for monitoring performance in train.py.
-    """
+    """Log execution time of any pipeline step."""
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        start_time = time.perf_counter()
+        start = time.perf_counter()
         result = func(*args, **kwargs)
-        end_time = time.perf_counter()
-        print(f"⏱️  {func.__name__!r} finished in {end_time - start_time:.2f}s")
+        elapsed = time.perf_counter() - start
+        logger.info(f"{func.__name__!r} finished in {elapsed:.2f}s")
         return result
     return wrapper
-
-def validate_clean_products(df):
+ 
+ 
+def validate_clean_products(df: pd.DataFrame) -> bool:
     """
-    Audits the quality of the cleaned data against project KPIs.
-    If these fail, we stop the train.py execution immediately.
+    Assert cleaned data meets project KPIs. Raises AssertionError on failure.
+ 
+    Fixed vs original:
+      - ram_fill_pct initialised to 0.0 before the if block — prevents NameError
+        when dataset has no Mobile/Laptop rows
+      - KPI threshold corrected to 80% (original code checked < 10 but printed '80%')
     """
-    print("🔍 Auditing Data Quality KPIs...")
-
-    # KPI 1: Brand Null Rate < 5%
-    brand_null_pct = df['brand'].isna().mean() * 100
-    if brand_null_pct > 5:
-        raise AssertionError(
-            f"KPI FAILURE: Brand Null Rate is {brand_null_pct:.2f}% (Limit: 5%).\n"
-            "CHECK: src/features/extract.py -> recover_brand()"
-        )
-
-    # KPI 2: RAM Fill Rate > 80% for tech categories
-    tech_df = df[df['category'].str.lower().isin(['mobile', 'laptop', 'smartphones', 'notebooks'])]
+    logger.info("Auditing data quality KPIs...")
+ 
+    # KPI 1: Brand null rate < 5%
+    brand_null_pct = df["brand"].isna().mean() * 100
+    assert brand_null_pct <= 5, (
+        f"KPI FAIL — brand null rate: {brand_null_pct:.1f}% (target ≤ 5%)\n"
+        "Fix: src/features/extract.py → recover_brand()"
+    )
+ 
+    # KPI 2: RAM fill rate > 80% for Mobile + Laptop
+    ram_fill_pct = 0.0   # FIX: initialised here, not inside if block
+    tech_df = df[df["category"].isin(["Mobile", "Laptop"])]
     if len(tech_df) > 0:
-        ram_null_pct = tech_df['ram_gb'].replace(0, float('nan')).isna().mean() * 100
-        ram_fill_pct = 100 - ram_null_pct
-        
-        if ram_fill_pct < 10:
-            raise AssertionError(
-                f" KPI FAILURE: Tech RAM Fill Rate is only {ram_fill_pct:.2f}% (Limit: 80%).\n"
-                "CHECK: src/features/extract.py -> extract_ram()"
-            )
-
-    print(f" Audit Passed: Brand Nulls at {brand_null_pct:.1f}%, RAM Fill at {ram_fill_pct:.1f}%")
+        ram_fill_pct = tech_df["ram_gb"].notna().mean() * 100
+        assert ram_fill_pct >= 80, (
+            f"KPI FAIL — RAM fill rate: {ram_fill_pct:.1f}% (target ≥ 80%)\n"
+            "Fix: src/features/extract.py → extract_ram() / extract_specs_features()"
+        )
+ 
+    # KPI 3: clean_content has no empty strings
+    empty = (df["clean_content"].str.strip() == "").sum()
+    assert empty == 0, f"KPI FAIL — {empty} rows have empty clean_content"
+ 
+    logger.info(
+        f"All KPIs passed — brand nulls: {brand_null_pct:.1f}%, "
+        f"RAM fill (Mobile+Laptop): {ram_fill_pct:.1f}%"
+    )
     return True
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+

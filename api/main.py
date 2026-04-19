@@ -1,60 +1,70 @@
-import os
+
+
 import joblib
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Query
 from contextlib import asynccontextmanager
-from typing import List, Optional
+from typing import Optional
 
-# --- CORE LOGIC IMPORTS ---
+from fastapi import FastAPI, HTTPException, Query
+
 from src.models.recommender import Recommender
+from src.search.engine import SearchEngine
 
-# Global placeholders for models and data
-models = {}
+# Global model store — loaded once at startup, reused for every request
+models: dict = {}
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """6.2 Model Persistence Strategy: Load once at startup"""
-    try:
-        print(" Loading models and dataset into memory...")
-        # Paths (adjust based on your actual folder structure)
-        clean_data_path = "Data/clean_products.csv"
-        matrix_path = "models/similarity_matrix.joblib"
-        vectorizer_path = "models/vectorizer.joblib"
+    """Load all models and data once at startup. Never reload on a request."""
+    print("Loading models into memory...")
 
-        # Load data
-        models["df"] = pd.read_csv(clean_data_path, encoding='utf-8-sig')
-        models["sim_matrix"] = joblib.load(matrix_path)
-        models["vectorizer"] = joblib.load(vectorizer_path)
-        
-        # Initialize Recommender
-        models["recommender"] = Recommender(clean_data_path, models["sim_matrix"])
-        
-        print(f" Startup complete. Dataset size: {len(models['df'])} products.")
-        yield
-    finally:
-        # Cleanup logic if needed
-        models.clear()
-        print(" API shutting down...")
+    clean_data_path  = "Data/clean_products.csv"
+    matrix_path      = "models/similarity_matrix.joblib"
+    vectorizer_path  = "models/vectorizer.joblib"
 
-app = FastAPI(title="VendorLensX Comparison API", lifespan=lifespan)
+    df         = pd.read_csv(clean_data_path, encoding="utf-8-sig")
+    sim_matrix = joblib.load(matrix_path)
+    vectorizer = joblib.load(vectorizer_path)
 
-# --- ENDPOINTS ---
+    models["df"]          = df
+    models["sim_matrix"]  = sim_matrix
+    models["vectorizer"]  = vectorizer
+
+    # FIX BUG-17: Recommender constructed once with already-loaded objects
+    models["recommender"] = Recommender.__new__(Recommender)
+    models["recommender"].df         = df
+    models["recommender"].sim_matrix = sim_matrix
+
+    # FIX BUG-16: SearchEngine constructed once — search calls use TF-IDF, not str.contains
+    models["search_engine"] = SearchEngine.__new__(SearchEngine)
+    models["search_engine"].df          = df
+    models["search_engine"].vectorizer  = vectorizer
+    models["search_engine"].tfidf_matrix = vectorizer.transform(df["clean_content"].fillna(""))
+
+    print(f"Startup complete. {len(df)} products loaded.")
+    yield
+
+    models.clear()
+    print("API shut down.")
+
+
+app = FastAPI(title="VendorLensX API", lifespan=lifespan)
+
+
 @app.get("/")
 async def root():
-    return {
-        "message": "Welcome to VendorLensX API",
-        "docs": "Go to /docs to test the endpoints",
-        "status": "Running"
-    }
+    return {"message": "VendorLensX API", "docs": "/docs", "status": "running"}
+
 
 @app.get("/health")
 async def health_check():
-    """Check API and Model status"""
     return {
         "status": "online",
-        "models_loaded": "recommender" in models,
-        "dataset_size": len(models.get("df", []))
+        "models_loaded": "search_engine" in models and "recommender" in models,
+        "dataset_size": len(models.get("df", [])),
     }
+
 
 @app.get("/search")
 async def search(
@@ -62,80 +72,68 @@ async def search(
     category: Optional[str] = None,
     brand: Optional[str] = None,
     min_price: float = 0,
-    max_price: float = 1000000,
-    n: int = 10
+    max_price: float = 1_000_000,
+    n: int = 10,
 ):
-    """6.1 GET /search - Fast keyword search with filters"""
-    df = models["df"]
-    
-    # 1. Filter logic
-    mask = (df['title'].str.contains(q, case=False, na=False)) & \
-           (df['discounted_price'] >= min_price) & \
-           (df['discounted_price'] <= max_price)
-    
-    if category: mask &= (df['category'] == category)
-    if brand: mask &= (df['brand'] == brand)
-    
-    results = df[mask].head(n)
-    
-    # Convert to list of dicts with image URLs and vendor links
-    return results.to_dict(orient="records")
+    """
+    TF-IDF semantic search with metadata filters.
+
+    Fixed vs original:
+      - Original used str.contains() — plain keyword match, TF-IDF never called
+      - Now delegates to SearchEngine which uses cosine similarity on the TF-IDF matrix
+    """
+    try:
+        results = models["search_engine"].search(
+            query=q,
+            category=category,
+            brand=brand,
+            min_price=min_price,
+            max_price=max_price,
+            n=n,
+        )
+        return results.fillna("").to_dict(orient="records")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Search error: {e}")
 
 
 @app.get("/recommend/{product_id}")
 async def recommend(product_id: int, n: int = 5):
+    """Return N similar products with vendor diversity guaranteed."""
+    if product_id not in models["df"]["id"].values:
+        raise HTTPException(status_code=404, detail=f"Product {product_id} not found")
     try:
-        # 1. Validate that the ID exists in the dataframe first
-        if product_id not in models["df"]['id'].values:
-            raise HTTPException(status_code=404, detail="Product ID not in database")
-
-        # 2. Get recommendations
-        recommendations = models["recommender"].recommend(product_id, n=n)
-        
-        # 3. Clean the output for JSON (Crucial for 500 error prevention)
-        return recommendations.fillna("").to_dict(orient="records")
+        results = models["recommender"].recommend(product_id, n=n)
+        return results.fillna("").to_dict(orient="records")
     except Exception as e:
-        print(f" Recommender Crash: {e}")
-        # This will tell us if it's an Index error or a Math error
-        raise HTTPException(status_code=500, detail=f"Recommendation Error: {str(e)}")
-    
+        raise HTTPException(status_code=500, detail=f"Recommendation error: {e}")
+
+
 @app.get("/product/{product_id}")
-async def get_product(product_id: int): # Change str to int here
-    df = models["df"]
-    
-    # Lookup by integer
-    product = df[df['id'] == product_id]
-    
+async def get_product(product_id: int):
+    product = models["df"][models["df"]["id"] == product_id]
     if product.empty:
-        raise HTTPException(status_code=404, detail=f"Product {product_id} not found.")
-    
+        raise HTTPException(status_code=404, detail=f"Product {product_id} not found")
     return product.fillna("").iloc[0].to_dict()
+
 
 @app.get("/filters")
 async def get_filters(category: Optional[str] = None):
     try:
-        df = models["df"]
+        df = models["df"].copy()
         if category and category != "All":
-            df = df[df['category'] == category]
-        
-        # Use .dropna() and handle empty lists to prevent JSON crashes
-        brands = sorted([str(b) for b in df['brand'].unique() if b and str(b) != 'nan'])
-        categories = sorted([str(c) for c in df['category'].unique() if c and str(c) != 'nan'])
-        
-        # Ensure prices are Python floats, not NumPy floats
-        min_p = float(df['discounted_price'].min()) if not df.empty else 0
-        max_p = float(df['discounted_price'].max()) if not df.empty else 1000000
+            df = df[df["category"] == category]
 
-        return {
-            "brands": brands,
-            "categories": categories,
-            "min_price": min_p,
-            "max_price": max_p
-        }
+        brands     = sorted(str(b) for b in df["brand"].dropna().unique() if str(b) != "nan")
+        categories = sorted(str(c) for c in models["df"]["category"].dropna().unique())
+        min_price  = float(df["discounted_price"].min()) if not df.empty else 0.0
+        max_price  = float(df["discounted_price"].max()) if not df.empty else 1_000_000.0
+
+        return {"brands": brands, "categories": categories,
+                "min_price": min_price, "max_price": max_price}
     except Exception as e:
-        print(f"🚨 Filter Crash: {e}")
-        raise HTTPException(status_code=500, detail=f"Filter Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Filter error: {e}")
+
 
 if __name__ == "__main__":
-    import uvicorn 
+    import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000)

@@ -33,7 +33,7 @@ st.markdown("""
 .vlx-tagline { font-size: 0.95rem; color: #64748B; margin-top: 2px; }
 .vlx-img-wrap { width: 100%; height: 200px; overflow: hidden; background: #F8FAFC; display: flex; align-items: center; justify-content: center; }
 .vlx-img-wrap img { width: 100%; height: 100%; object-fit: contain; }
-.vlx-title { font-size: 0.88rem; font-weight: 600; color: #1E293B; line-height: 1.35; min-height: 2.4rem; margin-bottom: 0.5rem; }
+.vlx-title { font-size: 1rem; font-weight: 800;color: #FFFFFF !important; line-height: 1.4; min-height: 3rem; margin-bottom: 0.6rem;display: -webkit-box; }
 .vlx-badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 0.72rem; font-weight: 700; color: #fff; margin-bottom: 0.4rem; }
 .vlx-price { font-size: 1.1rem; font-weight: 700; color: #7C3AED; }
 .vlx-price-sub { font-size: 0.75rem; color: #94A3B8; }
@@ -87,6 +87,7 @@ if "recs_cache" not in st.session_state: st.session_state.recs_cache = {}
 st.markdown("""
 <div class="vlx-header">
   <div class="vlx-logo">Vendor<span>Lens</span>X</div>
+  <div class="vlx-tagline">by off_WRLD</div>           
   <div class="vlx-tagline">Intelligent Cross-Vendor Market Analytics</div>
 </div>
 """, unsafe_allow_html=True)

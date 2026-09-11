@@ -137,3 +137,6 @@ dropped in without touching code.
   constant rather than a live rate.
 - Training artifacts (`models/*.joblib`) and MLflow run history (`mlruns/`)
   are currently checked into the repo rather than gitignored.
+  > **Note:** `models/` and `mlruns/` are gitignored. Run `python -m src.train`
+> after cloning to regenerate the fitted vectorizer, similarity matrix, and
+> local MLflow run history.

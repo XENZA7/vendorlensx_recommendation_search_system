@@ -124,6 +124,8 @@ def run_evaluation(
     else:
         sample_indices = np.arange(len(df))
 
+    configure_mlflow_tracking()
+    mlflow.set_experiment(experiment_name)    
     rec = Recommender.__new__(Recommender)
     rec.df = df
     rec.sim_matrix = sim_matrix
@@ -185,9 +187,4 @@ def baseline_recommend(df: pd.DataFrame, sim_matrix: np.ndarray, idx: int, k: in
     return df.index.get_indexer(result.index)
     
 
-    rec = Recommender.__new__(Recommender)
-    rec.df = df
-    rec.sim_matrix = sim_matrix
-
-    configure_mlflow_tracking()
-    mlflow.set_experiment(experiment_name)    
+    

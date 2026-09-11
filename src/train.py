@@ -9,11 +9,12 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 # FIX BUG-21: correct module name is preprocess, not processed
+
+from src.features.extract import run_feature_engineering
 from src.data.processed import load_and_clean
 from src.features.extract import run_feature_engineering
-from src.utils.helpers import validate_clean_products, timer
+from src.utils.helpers import validate_clean_products, timer, configure_mlflow_tracking
 from src.models.recommender import Recommender
-
 
 @timer
 def run_training_pipeline(
@@ -21,6 +22,7 @@ def run_training_pipeline(
     max_features: int = 8000,      # FIX BUG-22: raised from 5000
     ngram_range: tuple = (1, 2),
 ):
+    configure_mlflow_tracking()
     mlflow.set_experiment(experiment_name)
 
     with mlflow.start_run():

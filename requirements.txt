@@ -18,6 +18,8 @@ requests==2.32.3
  
 # MLOps
 mlflow==2.22.0
+sqlalchemy==2.0.36
+alembic==1.14.0
  
 # Notebook
 jupyter==1.1.1

@@ -12,7 +12,16 @@ logger = logging.getLogger(__name__)
 def get_project_root() -> Path:
     """Absolute path to project root (parent of src/)."""
     return Path(__file__).resolve().parent.parent.parent
- 
+def configure_mlflow_tracking() -> None:
+    """
+    Point MLflow at a local SQLite database instead of the plain filesystem
+    store ('./mlruns'). The filesystem backend is deprecated in newer MLflow
+    versions and will eventually stop working -- SQLite keeps runs queryable
+    and is a one-line fix.
+    """
+    import mlflow
+    db_path = get_project_root() / "mlflow.db"
+    mlflow.set_tracking_uri(f"sqlite:///{db_path}") 
  
 def get_data_path(relative: str) -> Path:
     """Resolve a path relative to the project root."""

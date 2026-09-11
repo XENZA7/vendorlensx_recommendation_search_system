@@ -5,7 +5,7 @@ from src.features.extract import extract_ram, recover_brand, extract_storage
 @pytest.mark.parametrize("input_title, expected", [
     ("Samsung Galaxy 8GB RAM", 8),
     ("HP Laptop 16 GB", 16),
-    ("No RAM mentioned phone", 0),
+    ("No RAM mentioned phone", None),
     ("12gb ram specialized", 12),
 ])
 def test_extract_ram(input_title, expected):
@@ -23,5 +23,5 @@ def test_recover_brand_aliases():
 
 # --- Test Storage Extraction ---
 def test_extract_storage():
-    assert extract_storage("iPhone 128GB") == "128GB"
-    assert extract_storage("MacBook 1TB SSD") == "1TB"
+    assert extract_storage("iPhone 128GB") == 128
+    assert extract_storage("MacBook 1TB SSD") == 1024

@@ -32,7 +32,8 @@ import numpy as np
 import pandas as pd
 
 from src.models.recommender import Recommender
-
+from src.models.recommender import Recommender
+from src.models.baseline_recommender import BaselineRecommender
 
 def baseline_recommend(df: pd.DataFrame, sim_matrix: np.ndarray, idx: int, k: int) -> np.ndarray:
     """Pure top-k by raw cosine similarity — no bias penalty, no diversity enforcement."""
@@ -169,3 +170,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     run_evaluation(k=args.k, sample=args.sample)
+    
+def baseline_recommend(df: pd.DataFrame, sim_matrix: np.ndarray, idx: int, k: int) -> np.ndarray:
+    """Pure top-k by raw cosine similarity, via BaselineRecommender — no bias penalty, no diversity enforcement."""
+    product_id = df.iloc[idx]["id"]
+    baseline = BaselineRecommender.__new__(BaselineRecommender)
+    baseline.df = df
+    baseline.sim_matrix = sim_matrix
+    result = baseline.recommend(product_id, n=k)
+    return df.index.get_indexer(result.index)
+    

@@ -1,0 +1,14 @@
+artifact_uri: file:///C:/Users/siyal/OneDrive/Documents/VendorLensX/vendorlensx_recommendation_search_system/mlruns/820612199427501357/5bcccc6cd444409c9b7aa98185bd2364/artifacts
+end_time: 1789127402525
+entry_point_name: ''
+experiment_id: '820612199427501357'
+lifecycle_stage: active
+run_id: 5bcccc6cd444409c9b7aa98185bd2364
+run_name: enhanced_k5
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1789127401661
+status: 3
+tags: []
+user_id: siyal

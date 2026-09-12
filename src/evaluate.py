@@ -15,6 +15,10 @@ Metrics (computed per product, then averaged):
   - relevance_retention       avg similarity score of top-k items
                                (enhanced's score relative to baseline shows
                                the "cost" of enforcing diversity)
+  - precision_at_k            fraction of top-k items that are a "relevant"
+                               substitute for the source item — same category
+                               AND price within +/-20% (a stricter proxy than
+                               category alone, which is trivially near 100%)
   - price_spread              avg (max - min) discounted_price within top-k
 
 Usage:
@@ -31,20 +35,19 @@ import mlflow
 import numpy as np
 import pandas as pd
 
-
-
-from src.utils.helpers import configure_mlflow_tracking
 from src.models.recommender import Recommender
 from src.models.baseline_recommender import BaselineRecommender
-
+from src.utils.helpers import configure_mlflow_tracking
 
 
 def baseline_recommend(df: pd.DataFrame, sim_matrix: np.ndarray, idx: int, k: int) -> np.ndarray:
-    """Pure top-k by raw cosine similarity — no bias penalty, no diversity enforcement."""
-    scores = sim_matrix[idx].copy()
-    ranked = scores.argsort()[::-1]
-    ranked = ranked[ranked != idx]
-    return ranked[:k]
+    """Pure top-k by raw cosine similarity, via BaselineRecommender — no bias penalty, no diversity enforcement."""
+    product_id = df.iloc[idx]["id"]
+    baseline = BaselineRecommender.__new__(BaselineRecommender)
+    baseline.df = df
+    baseline.sim_matrix = sim_matrix
+    result = baseline.recommend(product_id, n=k)
+    return df.index.get_indexer(result.index)
 
 
 def enhanced_recommend_indices(rec: Recommender, df: pd.DataFrame, idx: int, k: int) -> np.ndarray:
@@ -67,6 +70,35 @@ def intra_list_similarity(sim_matrix: np.ndarray, indices: np.ndarray) -> float:
     return float(np.mean(sims))
 
 
+def is_relevant(source_row: pd.Series, candidate_row: pd.Series, price_tolerance: float = 0.20) -> bool:
+    """
+    Relevance proxy: same category AND price within +/- price_tolerance of the
+    source item. Category alone is too weak a signal here — it's baked hard
+    into the TF-IDF content (brand x2 + category + title + specs), so almost
+    every recommendation already matches on category regardless of quality.
+    Requiring a comparable price band approximates "is this actually a
+    substitutable alternative", which is closer to what a shopper means by
+    a relevant recommendation.
+    """
+    if source_row["category"] != candidate_row["category"]:
+        return False
+    source_price = source_row["discounted_price"]
+    if source_price <= 0:
+        return False
+    candidate_price = candidate_row["discounted_price"]
+    lower, upper = source_price * (1 - price_tolerance), source_price * (1 + price_tolerance)
+    return lower <= candidate_price <= upper
+
+
+def precision_at_k(df: pd.DataFrame, idx: int, rec_idx: np.ndarray) -> float:
+    """Fraction of top-k recommendations that pass the relevance proxy."""
+    if len(rec_idx) == 0:
+        return 0.0
+    source_row = df.iloc[idx]
+    relevant = sum(is_relevant(source_row, df.iloc[r]) for r in rec_idx)
+    return relevant / len(rec_idx)
+
+
 def evaluate_variant(
     df: pd.DataFrame,
     sim_matrix: np.ndarray,
@@ -75,7 +107,7 @@ def evaluate_variant(
     variant: str,
     rec: Recommender = None,
 ) -> dict:
-    diversity_scores, ils_scores, relevance_scores, price_spreads = [], [], [], []
+    diversity_scores, ils_scores, relevance_scores, price_spreads, precision_scores = [], [], [], [], []
     seen_recommended_ids = set()
     n_catalog = len(df)
 
@@ -94,6 +126,7 @@ def evaluate_variant(
         diversity_scores.append(rec_rows["vendor"].nunique())
         ils_scores.append(intra_list_similarity(sim_matrix, rec_idx))
         relevance_scores.append(float(np.mean(sim_matrix[idx][rec_idx])))
+        precision_scores.append(precision_at_k(df, idx, rec_idx))
 
         prices = rec_rows["discounted_price"].values
         price_spreads.append(float(prices.max() - prices.min()) if len(prices) else 0.0)
@@ -103,6 +136,7 @@ def evaluate_variant(
         "intra_list_similarity": float(np.mean(ils_scores)) if ils_scores else 0.0,
         "catalog_coverage_pct": 100.0 * len(seen_recommended_ids) / n_catalog,
         "relevance_retention": float(np.mean(relevance_scores)) if relevance_scores else 0.0,
+        "precision_at_k": float(np.mean(precision_scores)) if precision_scores else 0.0,
         "price_spread_pkr": float(np.mean(price_spreads)) if price_spreads else 0.0,
         "num_queries_evaluated": len(diversity_scores),
     }
@@ -124,12 +158,11 @@ def run_evaluation(
     else:
         sample_indices = np.arange(len(df))
 
-    configure_mlflow_tracking()
-    mlflow.set_experiment(experiment_name)    
     rec = Recommender.__new__(Recommender)
     rec.df = df
     rec.sim_matrix = sim_matrix
 
+    configure_mlflow_tracking()
     mlflow.set_experiment(experiment_name)
 
     results = {}
@@ -151,6 +184,7 @@ def run_evaluation(
         print(f"  intra_list_similarity:   {metrics['intra_list_similarity']:.3f}")
         print(f"  catalog_coverage:        {metrics['catalog_coverage_pct']:.1f}%")
         print(f"  relevance_retention:     {metrics['relevance_retention']:.3f}")
+        print(f"  precision_at_{k}:         {metrics['precision_at_k']:.3f}")
         print(f"  price_spread (PKR):      {metrics['price_spread_pkr']:,.0f}")
 
     print("\n" + "=" * 60)
@@ -176,15 +210,3 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     run_evaluation(k=args.k, sample=args.sample)
-
-def baseline_recommend(df: pd.DataFrame, sim_matrix: np.ndarray, idx: int, k: int) -> np.ndarray:
-    """Pure top-k by raw cosine similarity, via BaselineRecommender — no bias penalty, no diversity enforcement."""
-    product_id = df.iloc[idx]["id"]
-    baseline = BaselineRecommender.__new__(BaselineRecommender)
-    baseline.df = df
-    baseline.sim_matrix = sim_matrix
-    result = baseline.recommend(product_id, n=k)
-    return df.index.get_indexer(result.index)
-    
-
-    

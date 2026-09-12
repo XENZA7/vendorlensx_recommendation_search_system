@@ -252,3 +252,13 @@ scrape can be dropped in without touching code.
   is an approximation, not ground-truth relevance labels — a genuinely
   rigorous evaluation would need human-labeled relevance judgments, which
   weren't available for this dataset.
+- Search and recommendations are TF-IDF/cosine based — matching is lexical,
+  not semantic (e.g. "phone" and "smartphone" won't match unless they share
+  tokens).
+- The vendor→ZAR price conversion in the frontend uses a fixed exchange rate
+  constant rather than a live rate.
+- Training artifacts (`models/*.joblib`) and MLflow run history (`mlruns/`)
+  are currently checked into the repo rather than gitignored.
+  > **Note:** `models/` and `mlruns/` are gitignored. Run `python -m src.train`
+> after cloning to regenerate the fitted vectorizer, similarity matrix, and
+> local MLflow run history.

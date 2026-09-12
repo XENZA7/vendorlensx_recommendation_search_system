@@ -1,26 +1,25 @@
-
 # Core data
-pandas==2.2.0
-numpy==2.4.3
+pandas>=2.2.2,<3.0.0
+numpy>=1.26.0,<3.0.0
 scikit-learn==1.8.0
 joblib==1.4.2
 matplotlib==3.10.1
- 
+
 # API
 fastapi==0.115.12
 uvicorn==0.34.0
 python-multipart==0.0.20
 pydantic==2.11.3
- 
+
 # Frontend
 streamlit==1.45.0
 requests==2.32.3
- 
+
 # MLOps
 mlflow==2.22.0
 sqlalchemy==2.0.36
 alembic==1.14.0
- 
+
 # Notebook
 jupyter==1.1.1
 ipykernel==6.29.5

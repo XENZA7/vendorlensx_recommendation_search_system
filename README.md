@@ -42,7 +42,7 @@ worth it, rather than assuming it is.
 - **Tracks every training and evaluation run in MLflow** — hyperparameters,
   vocabulary size, training time, and the full evaluation metric suite
   below, with the fitted vectorizer, similarity matrix, and cleaned
-  dataset logged as artifacts.
+dataset logged as artifacts.
 - **Evaluates itself** — a dedicated baseline-vs-enhanced comparison
   quantifies exactly what the diversity enforcement costs and buys you
   (see [Evaluation](#evaluation) below), instead of just asserting the
@@ -64,35 +64,44 @@ an oversight.
 
 ## Project structure
 
+├── .github/
+│   └── workflows/
+│       └── tests.yml # CI — runs the full test suite on every push and PR
 ├── api/
-│ └── main.py # FastAPI app: /search, /recommend, /product, /filters
+│   └── main.py # FastAPI app: /search, /recommend, /product, /filters
 ├── frontend/
-│ └── app.py # Streamlit UI — search, filters, live FX conversion
+│   └── app.py # Streamlit UI — search, filters, live FX conversion
 ├── src/
-│ ├── data/
-│ │ └── processed.py # Structural cleaning (prices, availability, dropped cols)
-│ ├── features/
-│ │ └── extract.py # Brand recovery, spec parsing, TF-IDF content building
-│ ├── models/
-│ │ ├── recommender.py # Vendor-bias penalty + diversity-enforced recommender
-│ │ └── baseline_recommender.py # Naive top-N by raw cosine similarity — the "before" model
-│ ├── search/
-│ │ └── engine.py # TF-IDF cosine-similarity search with metadata filters
-│ ├── utils/
-│ │ └── helpers.py # Timer decorator, KPI validation, MLflow config, path helpers
-│ ├── tests/ # 27 unit tests across extraction, both recommenders, and search
-│ ├── train.py # Orchestrates the full training pipeline
-│ └── evaluate.py # Baseline vs. enhanced evaluation across 5 metrics
-├── .github/workflows/
-│ └── tests.yml # CI — runs the full test suite on every push and PR
-├── Notebooks/ # EDA, cleaning, and prototyping notebooks
+│   ├── data/
+│   │   └── processed.py # Structural cleaning (prices, availability, dropped cols)
+│   ├── features/
+│   │   └── extract.py # Brand recovery, spec parsing, TF-IDF content building
+│   ├── models/
+│   │   ├── recommender.py # Vendor-bias penalty + diversity-enforced recommender
+│   │   └── baseline_recommender.py # Naive top-N by raw cosine similarity — the "before" model
+│   ├── search/
+│   │   └── engine.py # TF-IDF cosine-similarity search with metadata filters
+│   ├── tests/
+│   │   ├── extract_test.py # Feature extraction unit tests
+│   │   ├── recommender_test.py # Recommender logic + diversity edge cases
+│   │   ├── baseline_recommender_test.py # Baseline-model contrast tests
+│   │   └── search_engine_test.py # Search-engine ranking/filter tests
+│   ├── utils/
+│   │   └── helpers.py # Timer decorator, KPI validation, MLflow config, path helpers
+│   ├── train.py # Orchestrates the full training pipeline
+│   └── evaluate.py # Baseline vs. enhanced evaluation across 5 metrics
 ├── Data/
-│ ├── data.csv # Raw scraped catalogue
-│ └── clean_products.csv # Cleaned + feature-engineered output of train.py
-├── models/ # Fitted vectorizer.joblib / similarity_matrix.joblib (gitignored)
-├── mlflow.db # MLflow SQLite tracking store (gitignored)
-└── requirements.txt
-
+│   ├── data.csv # Raw scraped catalogue
+│   ├── clean_products.csv # Cleaned + feature-engineered output of train.py
+│   └── processed/ # Processed intermediate outputs
+├── Notebooks/
+│   ├── EDA.ipynb # Exploratory data analysis
+│   ├── cleaning_feature_engineering.ipynb # Cleaning + feature engineering
+│   └── Recomendation_search_engine.ipynb # Recommendation/search prototyping
+├── .gitignore
+├── README.md
+├── requirements.txt
+└── .gitignore
 
 ## Setup
 
@@ -246,7 +255,7 @@ scrape can be dropped in without touching code.
 
 - Search and recommendations are TF-IDF/cosine based — matching is
   lexical, not semantic (e.g. "phone" and "smartphone" won't match unless
-  they share tokens). See [Why TF-IDF instead of embeddings?](#why-tf-idf-instead-of-embeddings)
+they share tokens). See [Why TF-IDF instead of embeddings?](#why-tf-idf-instead-of-embeddings)
   above for why this is a deliberate trade-off rather than an oversight.
 - `precision_at_k`'s relevance proxy (same category + price within ±20%)
   is an approximation, not ground-truth relevance labels — a genuinely

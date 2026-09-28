@@ -64,41 +64,43 @@ an oversight.
 
 ## Project structure
 
+```text
 ├── .github/
-│ └── workflows/
-│ └── tests.yml # CI — runs the full test suite on every push and PR
+│   └── workflows/
+│       └── tests.yml                    # CI — runs the full test suite on every push and PR
 ├── api/
-│ └── main.py # FastAPI app: /search, /recommend, /product, /filters
+│   └── main.py                          # FastAPI app: /search, /recommend, /product, /filters
 ├── frontend/
-│ └── app.py # Streamlit UI — search, filters, live FX conversion
+│   └── app.py                           # Streamlit UI — search, filters, live FX conversion
 ├── src/
-│ ├── data/
-│ │ └── processed.py # Structural cleaning (prices, availability, dropped cols)
-│ ├── features/
-│ │ └── extract.py # Brand recovery, spec parsing, TF-IDF content building
-│ ├── models/
-│ │ ├── recommender.py # Vendor-bias penalty + diversity-enforced recommender
-│ │ └── baseline_recommender.py # Naive top-N by raw cosine similarity — the "before" model
-│ ├── search/
-│ │ └── engine.py # TF-IDF cosine-similarity search with metadata filters
-│ ├── tests/
-│ │ ├── extract_test.py # Feature extraction unit tests
-│ │ ├── recommender_test.py # Recommender logic + diversity edge cases
-│ │ ├── baseline_recommender_test.py # Baseline-model contrast tests
-│ │ └── search_engine_test.py # Search-engine ranking/filter tests
-│ ├── utils/
-│ │ └── helpers.py # Timer decorator, KPI validation, MLflow config, path helpers
-│ ├── train.py # Orchestrates the full training pipeline
-│ └── evaluate.py # Baseline vs. enhanced evaluation across 5 metrics
+│   ├── data/
+│   │   └── processed.py                 # Structural cleaning (prices, availability, dropped cols)
+│   ├── features/
+│   │   └── extract.py                   # Brand recovery, spec parsing, TF-IDF content building
+│   ├── models/
+│   │   ├── recommender.py               # Vendor-bias penalty + diversity-enforced recommender
+│   │   └── baseline_recommender.py      # Naive top-N by raw cosine similarity — the "before" model
+│   ├── search/
+│   │   └── engine.py                    # TF-IDF cosine-similarity search with metadata filters
+│   ├── tests/
+│   │   ├── extract_test.py              # Feature extraction unit tests
+│   │   ├── recommender_test.py          # Recommender logic + diversity edge cases
+│   │   ├── baseline_recommender_test.py # Baseline-model contrast tests
+│   │   └── search_engine_test.py        # Search-engine ranking/filter tests
+│   ├── utils/
+│   │   └── helpers.py                   # Timer decorator, KPI validation, MLflow config, path helpers
+│   ├── train.py                         # Orchestrates the full training pipeline
+│   └── evaluate.py                      # Baseline vs. enhanced evaluation across 5 metrics
 ├── Data/
-│ ├── data.csv # Raw scraped catalogue
-│ └── clean_products.csv # Cleaned + feature-engineered output of train.py
-├── Notebooks/ # EDA, cleaning, and prototyping notebooks
-├── models/ # Fitted vectorizer.joblib / similarity_matrix.joblib (gitignored)
-├── mlflow.db # MLflow SQLite tracking store (gitignored)
+│   ├── data.csv                         # Raw scraped catalogue
+│   └── clean_products.csv               # Cleaned + feature-engineered output of train.py
+├── Notebooks/                           # EDA, cleaning, and prototyping notebooks
+├── models/                              # Fitted vectorizer.joblib / similarity_matrix.joblib (gitignored)
+├── mlflow.db                            # MLflow SQLite tracking store (gitignored)
 ├── .gitignore
 ├── README.md
 └── requirements.txt
+```
 
 ## Setup
 

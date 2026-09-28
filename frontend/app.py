@@ -5,7 +5,8 @@ from typing import Union, Optional, List, Dict
 
 # ── 1. CONFIGURATION & CONSTANTS ──────────────────────────────────────────────
 API_BASE = "http://127.0.0.1:8000"
-PKR_TO_ZAR = 0.065
+FX_API_URL = "https://open.er-api.com/v6/latest/PKR"
+PKR_TO_ZAR_FALLBACK = 0.065  # used only if the live rate can't be fetched
 
 VENDOR_COLOURS = {
     "PriceOye":     "#7C3AED",
@@ -64,19 +65,56 @@ def truncate(text: str, limit: int = 55) -> str:
     return text if len(text) <= limit else text[:limit].rstrip() + "…"
 
 def api_get(path: str, params: Optional[Dict] = None):
+    """
+    GET against the API, returning (data, error) instead of silently
+    swallowing failures. error is None on success (HTTP 200), otherwise a
+    short dict describing what went wrong so the UI can show something
+    other than an unexplained empty result.
+    """
     try:
         r = requests.get(f"{API_BASE}{path}", params=params, timeout=8)
-        return r.json() if r.status_code == 200 else None
-    except: return None
+        if r.status_code == 200:
+            return r.json(), None
+        return None, {"type": "http", "detail": f"API returned {r.status_code} for {path}"}
+    except requests.exceptions.Timeout:
+        return None, {"type": "timeout", "detail": f"Request to {path} timed out after 8s"}
+    except requests.exceptions.ConnectionError:
+        return None, {"type": "connection", "detail": "Could not reach the API — is it running?"}
+    except Exception as e:
+        return None, {"type": "unknown", "detail": str(e)}
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_live_fx_rate():
+    """
+    Live PKR->ZAR rate from open.er-api.com (no key required, updates daily).
+    Falls back to PKR_TO_ZAR_FALLBACK on any failure so the app keeps working
+    even if the FX API is unreachable.
+
+    Returns (rate, as_of_str, is_live).
+    """
+    try:
+        r = requests.get(FX_API_URL, timeout=5)
+        data = r.json()
+        if data.get("result") == "success" and "ZAR" in data.get("rates", {}):
+            rate = float(data["rates"]["ZAR"])
+            as_of = data.get("time_last_update_utc", "")
+            return rate, as_of, True
+    except Exception:
+        pass
+    return PKR_TO_ZAR_FALLBACK, None, False
+
+PKR_TO_ZAR, FX_AS_OF, FX_IS_LIVE = fetch_live_fx_rate()
 
 # ── 4. DATA LOADING & STATE ───────────────────────────────────────────────────
 @st.cache_data(ttl=300)
 def load_filters():
-    data = api_get("/filters")
-    return data if data else {"brands": [], "categories": [], "min_price": 0, "max_price": 1000000}
+    data, error = api_get("/filters")
+    if error:
+        return {"brands": [], "categories": [], "min_price": 0, "max_price": 1000000, "_error": error}
+    return data
 
 def check_api_health() -> bool:
-    data = api_get("/health")
+    data, _ = api_get("/health")
     return bool(data and data.get("status") == "online")
 
 if "results" not in st.session_state: st.session_state.results = []
@@ -97,9 +135,17 @@ with st.sidebar:
     api_ok = check_api_health()
     dot, label = ("vlx-dot-green", "API Online") if api_ok else ("vlx-dot-red", "API Offline")
     st.markdown(f'<div class="vlx-status"><span class="vlx-dot {dot}"></span>{label}</div>', unsafe_allow_html=True)
+
+    if FX_IS_LIVE:
+        st.caption(f"💱 Live rate: 1 PKR = {PKR_TO_ZAR:.4f} ZAR · updated {FX_AS_OF}")
+        st.caption("Rates by [ExchangeRate-API](https://www.exchangerate-api.com)")
+    else:
+        st.caption(f"💱 Using fallback rate: 1 PKR = {PKR_TO_ZAR:.4f} ZAR (live rate unavailable)")
     st.markdown("---")
 
     filters = load_filters()
+    if filters.get("_error"):
+        st.warning(f"Couldn't load filters: {filters['_error']['detail']}")
     category = st.selectbox("Category", ["All"] + filters.get("categories", []))
     show_zar = st.toggle("Show prices in ZAR (R)", value=False)
     selected_brands = st.multiselect("Brand", filters.get("brands", []))
@@ -127,18 +173,33 @@ if query and query_key != st.session_state.last_query_key:
         if category != "All": params["category"] = category
         if ram_filter: params["min_ram"] = ram_filter
 
+        errors = []
         if selected_brands:
             all_res, seen = [], set()
             for b in selected_brands:
-                data = api_get("/search", {**params, "brand": b})
-                if data:
+                data, error = api_get("/search", {**params, "brand": b})
+                if error:
+                    errors.append(error)
+                elif data:
                     for item in data:
                         if item['id'] not in seen: all_res.append(item); seen.add(item['id'])
             st.session_state.results = all_res
         else:
-            data = api_get("/search", params)
+            data, error = api_get("/search", params)
+            if error:
+                errors.append(error)
             st.session_state.results = data if data else []
-        
+
+        if errors:
+            # Show the most specific error once — no need to repeat per-brand duplicates
+            first = errors[0]
+            if first["type"] == "timeout":
+                st.error("The search took too long to respond. Try again in a moment.")
+            elif first["type"] == "connection":
+                st.error("Can't reach the API — make sure it's running (`uvicorn api.main:app --reload`).")
+            else:
+                st.error(f"Search failed: {first['detail']}")
+
         st.session_state.last_query_key = query_key
         st.session_state.recs_cache = {}
 
@@ -187,7 +248,10 @@ if query:
                 with st.expander("Details & Similar"):
                     st.write(f"**Specs:** {item.get('extracted_specs', 'N/A')}")
                     if item["id"] not in st.session_state.recs_cache:
-                        st.session_state.recs_cache[item["id"]] = api_get(f"/recommend/{item['id']}") or []
+                        rec_data, rec_error = api_get(f"/recommend/{item['id']}")
+                        st.session_state.recs_cache[item["id"]] = rec_data or []
+                        if rec_error:
+                            st.caption(f"⚠️ Couldn't load similar products: {rec_error['detail']}")
                     for r in st.session_state.recs_cache[item["id"]]:
                         st.markdown(f'<div class="vlx-rec-row"><span>{r["vendor"]}</span><span style="flex:1">{truncate(r["title"], 40)}</span><b>{format_price(r["discounted_price"], show_zar)}</b></div>', unsafe_allow_html=True)
     else:

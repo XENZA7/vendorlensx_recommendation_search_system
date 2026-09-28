@@ -8,7 +8,7 @@ KNOWN_BRANDS = [
     "Red Magic", "VGO TEL", "OnePlus",                          # multi-word first
     "Apple", "Samsung", "Oppo", "Vivo", "Realme", "Infinix",
     "Tecno", "Nokia", "Huawei", "Xiaomi", "Motorola", "Sparx",
-    "Hisense", "Haier", "Honor", "Redmi", "Poco", "Itel",
+    "Hisense", "Haier", "Honor", "Poco", "Itel",
     "Blackberry", "Google", "Nothing",
     "Microsoft", "Lenovo", "Dell", "Asus", "Acer", "MSI",
     "Razer", "HP", "Toshiba", "LG", "Panasonic",
@@ -20,6 +20,15 @@ KNOWN_BRANDS = [
 BRAND_NORMALISE = {
     "hp": "HP", "Hp": "HP", "OPPO": "Oppo",
     "oppo": "Oppo", "DELL": "Dell", "SAMSUNG": "Samsung",
+}
+
+# Product-line names that are actually marketing sub-brands of a parent
+# manufacturer — mapped to the parent so vendor-diversity/search grouping
+# treats them as one brand (e.g. "iPhone 13" and "Redmi Note 10" should
+# both roll up under their real manufacturer).
+BRAND_ALIASES = {
+    "iphone": "Apple",
+    "redmi": "Xiaomi",
 }
 
 def _word_boundary_match(brand: str, text: str) -> bool:
@@ -35,6 +44,11 @@ def recover_brand(row: pd.Series) -> str:
         return BRAND_NORMALISE.get(brand, brand)
 
     title = str(row.get("title", "")).strip()
+
+    for alias, parent in BRAND_ALIASES.items():
+        if _word_boundary_match(alias, title):
+            return parent
+
     for brand in KNOWN_BRANDS:
         if _word_boundary_match(brand, title):
             return brand
